@@ -1,0 +1,5 @@
+PySide6==6.5.2
+requests==2.32.0
+loguru==0.7.2
+tencentcloud-sdk-python-teo==3.0.1019
+pyinstaller==6.3.0
