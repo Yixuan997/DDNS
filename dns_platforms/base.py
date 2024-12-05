@@ -9,6 +9,7 @@ DNS平台的基类，定义了所有DNS平台必须实现的接口
 """
 
 from abc import ABC, abstractmethod
+
 from utils.logger import Logger
 
 
@@ -56,11 +57,9 @@ class BaseDNS(ABC):
                     return False
                 if current_ipv4 == ipv4:
                     self.logger.info(f"[{self.__class__.__name__}][{self.domain}] - IPv4记录已是最新 ({ipv4})")
-                    return True  # 记录已是最新，直接返回True
-                success = self._update_record(ipv4)  # 只在需要更新时调用
-                if success:
-                    self.logger.info(f"[{self.__class__.__name__}][{self.domain}] - 记录更新成功")
-                return success
+                    return True  # 记录已是最新，直接返回True，不调用_update_record
+                # 只在需要更新时调用_update_record
+                return self._update_record(ipv4)
 
             elif self.record_type == 'AAAA':
                 if not ipv6:
@@ -68,11 +67,9 @@ class BaseDNS(ABC):
                     return False
                 if current_ipv6 == ipv6:
                     self.logger.info(f"[{self.__class__.__name__}][{self.domain}] - IPv6记录已是最新 ({ipv6})")
-                    return True  # 记录已是最新，直接返回True
-                success = self._update_record(ipv6)  # 只在需要更新时调用
-                if success:
-                    self.logger.info(f"[{self.__class__.__name__}][{self.domain}] - 记录更新成功")
-                return success
+                    return True  # 记录已是最新，直接返回True，不调用_update_record
+                # 只在需要更新时调用_update_record
+                return self._update_record(ipv6)
 
             return False
 

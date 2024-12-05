@@ -68,37 +68,41 @@ class DNSUpdater:
                     continue
 
                 # 检查是否需要更新
+                need_update = False
                 if platform.record_type == 'A':
                     if not ipv4:
                         continue
                     if current_ipv4 == ipv4:
                         self.logger.info(f"[{platform_key}] DNS记录已是最新 ({ipv4})")
-                        continue
-                    self.logger.info(f"[{platform_key}] DNS记录需要更新: IPv4: {current_ipv4} -> {ipv4}")
+                    else:
+                        need_update = True
+                        self.logger.info(f"[{platform_key}] DNS记录需要更新: IPv4: {current_ipv4} -> {ipv4}")
                 elif platform.record_type == 'AAAA':
                     if not ipv6:
                         continue
                     if current_ipv6 == ipv6:
                         self.logger.info(f"[{platform_key}] DNS记录已是最新 ({ipv6})")
-                        continue
-                    self.logger.info(f"[{platform_key}] DNS记录需要更新: IPv6: {current_ipv6} -> {ipv6}")
+                    else:
+                        need_update = True
+                        self.logger.info(f"[{platform_key}] DNS记录需要更新: IPv6: {current_ipv6} -> {ipv6}")
                 else:
                     continue
 
-                # 执行更新
-                try:
-                    if platform.update_records(ipv4, ipv6):
-                        self.logger.info(f"[{platform_key}] DNS记录更新成功")
+                # 只在需要更新时执行更新
+                if need_update:
+                    try:
+                        if platform.update_records(ipv4, ipv6):
+                            self.logger.info(f"[{platform_key}] DNS记录更新成功")
+                            if hasattr(self, 'main_window') and self.main_window:
+                                self.main_window.show_message(f"DNS记录更新成功: {platform_key}", "success")
+                        else:
+                            self.logger.error(f"[{platform_key}] DNS记录更新失败")
+                            if hasattr(self, 'main_window') and self.main_window:
+                                self.main_window.show_message(f"DNS记录更新失败: {platform_key}", "error")
+                    except Exception as e:
+                        self.logger.error(f"[{platform_key}] 更新记录时出错: {str(e)}")
                         if hasattr(self, 'main_window') and self.main_window:
-                            self.main_window.show_message(f"DNS记录更新成功: {platform_key}", "success")
-                    else:
-                        self.logger.error(f"[{platform_key}] DNS记录更新失败")
-                        if hasattr(self, 'main_window') and self.main_window:
-                            self.main_window.show_message(f"DNS记录更新失败: {platform_key}", "error")
-                except Exception as e:
-                    self.logger.error(f"[{platform_key}] 更新记录时出错: {str(e)}")
-                    if hasattr(self, 'main_window') and self.main_window:
-                        self.main_window.show_message(f"更新记录出错: {platform_key}", "error")
+                            self.main_window.show_message(f"更新记录出错: {platform_key}", "error")
 
             except Exception as e:
                 self.logger.error(f"[{platform_key}] 检查和更新DNS记录失败: {str(e)}")
