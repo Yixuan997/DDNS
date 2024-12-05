@@ -7,6 +7,7 @@
 """
 
 from PySide6.QtCore import QThread, Signal
+
 from utils.logger import Logger
 
 
@@ -130,4 +131,4 @@ class IPCheckThread(BaseThread):
 
     def run(self):
         ipv4, ipv6 = self.safe_run(self.ip_checker.get_current_ips)
-        self.ip_checked.emit(ipv4 or '', ipv6 or '') 
+        self.ip_checked.emit(ipv4 or '', ipv6 or '')

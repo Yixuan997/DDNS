@@ -7,6 +7,7 @@
 """
 
 import sys
+
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
@@ -33,6 +34,7 @@ if __name__ == "__main__":
         window.show()
         app.processEvents()
 
+
         # 延迟初始化DNS更新器和其他功能
         def delayed_init():
             global dns_updater, memory_timer
@@ -48,6 +50,7 @@ if __name__ == "__main__":
 
             # 延迟1秒后启动DNS更新器
             QTimer.singleShot(1000, dns_updater.start)
+
 
         # 延迟初始化
         QTimer.singleShot(500, delayed_init)

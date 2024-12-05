@@ -7,11 +7,10 @@
 """
 
 from PySide6.QtCore import QObject, QTimer
-from utils.threads import DNSUpdateThread, DNSInitThread, IPCheckThread
 
-from utils.logger import Logger
-from utils.memory_tracker import MemoryTracker
 from utils.ip_checker import IPChecker
+from utils.logger import Logger
+from utils.threads import DNSUpdateThread, DNSInitThread, IPCheckThread
 
 
 class DNSUpdater(QObject):

@@ -7,6 +7,7 @@
 """
 
 import requests
+
 from .base import BaseDNS
 
 
@@ -210,3 +211,31 @@ class CloudflareDNS(BaseDNS):
         """清除所有缓存"""
         self._zone_id = None
         self._record_ids.clear()
+
+    def _update_record(self, value):
+        """更新记录"""
+        try:
+            # 获取记录ID
+            record_id = self._get_record_id()
+            if not record_id:
+                # 如果记录不存在，创建新记录
+                return self._create_record(value)
+
+            # 更新现有记录
+            url = f"{self.api_base}/zones/{self.zone_id}/dns_records/{record_id}"
+            data = {
+                'type': self.record_type,
+                'name': f"{self.hostname}.{self.domain}" if self.hostname != '@' else self.domain,
+                'content': value,
+                'proxied': False
+            }
+
+            response = self._make_request('PUT', url, json=data)
+            if response and response.get('success'):
+                self.logger.info(f"[CLOUDFLARE][{self.domain}] - 记录更新成功")
+                return True
+            return False
+
+        except Exception as e:
+            self.logger.error(f"更新记录失败: {str(e)}")
+            return False

@@ -60,7 +60,7 @@ class DNSTab(QWidget):
         self.add_btn.setFixedWidth(60)  # 设置固定宽度
         self.add_btn.clicked.connect(self.add_record)
 
-        # 编辑记录按钮
+        # 编辑记录按���
         self.edit_btn = QPushButton("编辑")
         self.edit_btn.setObjectName("primaryButton")
         self.edit_btn.setFixedWidth(60)  # 设置固定宽度
@@ -103,8 +103,15 @@ class DNSTab(QWidget):
         domain = self.records_table.item(row, 1).text()
         hostname = self.records_table.item(row, 2).text()
 
-        # 获取平台模块名
-        platform_module = PLATFORM_MAPPING.get(platform)
+        # 获取平台模块名 - 修改这部分代码
+        platform_mapping = {
+            'Tencent': '腾讯云',
+            'Aliyun': '阿里云',
+            'Cloudflare': 'Cloudflare'
+        }
+        platform_name = platform_mapping.get(platform, platform)
+        platform_module = PLATFORM_MAPPING.get(platform_name)
+
         if not platform_module:
             self.logger.error(f"不支持的DNS平台: {platform}")
             return
@@ -119,7 +126,7 @@ class DNSTab(QWidget):
         for record in records:
             if record.get('domain') == domain and record.get('hostname', '@') == hostname:
                 record_data = record.copy()
-                record_data['platform'] = platform
+                record_data['platform'] = platform_name  # 使用正确的平台名称
                 break
 
         if record_data:
@@ -356,7 +363,7 @@ class DNSTab(QWidget):
                         try:
                             module = importlib.import_module(f"dns_platforms.{platform_module}")
                             platform_class = getattr(module, f"{platform_module.title()}DNS")
-                            # 保留所���平台特定的字段
+                            # 保留所平台特定的字段
                             for field in platform_class.CONFIG_FIELDS:
                                 if field != 'domain':  # 域名已经有了
                                     record_config[field] = old_records.get(field, '')
@@ -490,7 +497,7 @@ class DNSTab(QWidget):
 
         # 设置表格其他属性
         self.records_table.setShowGrid(False)  # 不显示网格线
-        self.records_table.setAlternatingRowColors(True)  # 交替行颜色
+        self.records_table.setAlternatingRowColors(True)  # 交���行颜色
         self.records_table.verticalHeader().setVisible(False)  # 隐藏行号
 
     def refresh_records(self):

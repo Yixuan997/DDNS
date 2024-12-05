@@ -51,6 +51,7 @@ class IPCheckThread(QThread):
 
 class StatusTab(QWidget):
     """状态标签页，显示IP地址和DNS更新状态"""
+
     def __init__(self, ip_checker, main_window, config, dns_updater):
         """
         初始化状态标签页
