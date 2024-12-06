@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QProgre
 
 from utils.resource_manager import ResourceManager
 from utils.updater import Updater
+from utils.logger import Logger
 
 
 class AboutDialog(QWidget):
@@ -135,6 +136,7 @@ class AboutDialog(QWidget):
             has_update, update_info = result
             try:
                 if has_update and update_info:
+                    # Logger().debug(f"检测到新版本: {update_info.get('version')}")
                     # 显示更新确认对话框
                     if self.parent.show_dialog(
                             f"发现新版本: v{update_info['version']}\n\n"
@@ -144,25 +146,27 @@ class AboutDialog(QWidget):
                     ):
                         self.start_download(update_info['download_url'])
                     else:
-                        # 用户取消更新，恢复按钮状态
                         self._reset_button_state()
                 elif update_info and 'error' in update_info:
                     # 显示错误信息
-                    self.parent.show_message(f"检查更新失败: {update_info['error']}", "error")
+                    error_msg = f"检查更新失败: {update_info['error']}"
+                    self.parent.show_message(error_msg, "error")
                     self._reset_button_state()
                 else:
                     self.parent.show_message("当前已是最新版本", "success")
                     self._reset_button_state()
             except Exception as e:
-                self.parent.show_message(f"处理更新信息失败: {str(e)}", "error")
+                error_msg = f"处理更新信息失败: {str(e)}"
+                self.parent.show_message(error_msg, "error")
                 self._reset_button_state()
 
         try:
             # 使用回调函数方式调用
             self.updater.check_update(update_callback)
         except Exception as e:
+            error_msg = f"启动更新检查失败: {str(e)}"
             if self.parent:
-                self.parent.show_message(f"启动更新检查失败: {str(e)}", "error")
+                self.parent.show_message(error_msg, "error")
             self._reset_button_state()
 
     def start_download(self, url):
@@ -171,6 +175,16 @@ class AboutDialog(QWidget):
             return
 
         try:
+            # 获取镜像地址列表
+            from utils.updater import UpdateMirrors
+            mirrors = UpdateMirrors()
+            mirror_urls = mirrors.get_download_urls(url)
+            if not mirror_urls:
+                self.parent.show_message("未能生成有效的镜像地址", "error")
+                return
+
+            # 使用第一个镜像地址
+            download_url = mirror_urls[0]
             # 显示进度条并设置按钮状态
             self.progress_bar.setVisible(True)
             self.progress_bar.setValue(0)
@@ -186,7 +200,6 @@ class AboutDialog(QWidget):
             def progress_callback(value):
                 if not self.isHidden():  # 确保窗口还在
                     self.progress_bar.setValue(value)
-                    # 更新按钮文字，使用箭头符号
                     if value < 100:
                         self.update_btn.setText(f"下载中 {value}%")
                     else:
@@ -198,24 +211,24 @@ class AboutDialog(QWidget):
                     self.download_complete()
 
             def download_error(error):
-                if not self.isHidden():
                     self.parent.show_message(f"下载失败: {error}", "error")
                     self.download_complete()
 
             # 创建下载线程
             from utils.threads import UpdateDownloadThread
-            download_thread = UpdateDownloadThread(url)
+            download_thread = UpdateDownloadThread(download_url)  # 使用镜像地址
             download_thread.progress.connect(progress_callback)
             download_thread.success.connect(download_success)
             download_thread.error.connect(download_error)
 
-            # 启动下载线程
             from utils.threads import ThreadManager
             ThreadManager.instance().submit_thread(download_thread)
 
         except Exception as e:
+            error_msg = f"启动更新下载失败: {str(e)}"
+            Logger().error(error_msg)
             if self.parent:
-                self.parent.show_message(f"启动下载失败: {str(e)}", "error")
+                self.parent.show_message(error_msg, "error")
             self.download_complete()
 
     def download_complete(self):
@@ -224,6 +237,7 @@ class AboutDialog(QWidget):
             self.progress_bar.setVisible(False)
             self.progress_bar.setValue(0)
             self._reset_button_state()
+            Logger().info("更新下载流程结束")
 
     def _reset_button_state(self):
         """重置按钮状态"""
