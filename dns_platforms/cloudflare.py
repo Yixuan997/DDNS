@@ -181,16 +181,17 @@ class CloudflareDNS(BaseDNS):
             return False
 
         current_ipv4, current_ipv6 = self.get_current_records()
+        full_domain = f"{self.hostname}.{self.domain}" if self.hostname != '@' else self.domain
 
         if ipv4 and ipv4 != current_ipv4:
             ipv4_id = self.get_record_id(zone_id, 'A')
-            self.logger.info(f"[[CLOUDFLARE][{self.domain}]] DNS记录需要更新: IPv4: {current_ipv4} -> {ipv4}")
+            self.logger.info(f"[CLOUDFLARE][{full_domain}] DNS记录需要更新: IPv4: {current_ipv4 or '无'} -> {ipv4}")
             if not self.update_record(zone_id, ipv4_id, 'A', ipv4):
                 return False
 
         if ipv6 and ipv6 != current_ipv6:
             ipv6_id = self.get_record_id(zone_id, 'AAAA')
-            self.logger.info(f"[[CLOUDFLARE][{self.domain}]] DNS记录需要更新: IPv6: {current_ipv6} -> {ipv6}")
+            self.logger.info(f"[CLOUDFLARE][{full_domain}] DNS记录需要更新: IPv6: {current_ipv6 or '无'} -> {ipv6}")
             if not self.update_record(zone_id, ipv6_id, 'AAAA', ipv6):
                 return False
 

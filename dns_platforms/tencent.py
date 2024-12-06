@@ -41,7 +41,7 @@ class TencentDNS(BaseDNS):
 
     def __init__(self, config):
         """
-        初始化腾讯云DNS
+        初���化腾讯云DNS
         Args:
             config: 包含认证信息的配置字典
         """
@@ -170,6 +170,8 @@ class TencentDNS(BaseDNS):
                 self.logger.error(f"未找到域名 {self.domain} 的ZoneId")
                 return False
 
+            full_domain = f"{self.hostname}.{self.domain}" if self.hostname != '@' else self.domain
+
             # 构建源站信息
             origin_info = {
                 "OriginType": "IP_DOMAIN",
@@ -179,7 +181,7 @@ class TencentDNS(BaseDNS):
             req = models.ModifyAccelerationDomainRequest()
             params = {
                 "ZoneId": zone_id,
-                "DomainName": f"{self.hostname}.{self.domain}" if self.hostname != '@' else self.domain,
+                "DomainName": full_domain,
                 "OriginInfo": origin_info
             }
             req.from_json_string(json.dumps(params))
@@ -189,7 +191,7 @@ class TencentDNS(BaseDNS):
 
             success = 'Response' in result and 'RequestId' in result['Response']
             if success:
-                self.logger.info(f"[TENCENT][{self.domain}] - 记录更新成功")
+                self.logger.info(f"[TENCENT][{full_domain}] - 记录更新成功")
             return success
 
         except TencentCloudSDKException as e:

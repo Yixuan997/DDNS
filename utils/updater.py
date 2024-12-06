@@ -7,7 +7,7 @@ from utils.logger import Logger
 
 
 class Updater:
-    CURRENT_VERSION = "1.0.0"
+    CURRENT_VERSION = "1.0.1"
     GITHUB_API = "https://api.github.com/repos/Yixuan997/DDNS/releases/latest"
 
     def __init__(self):

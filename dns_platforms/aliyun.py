@@ -167,26 +167,26 @@ class AliyunDNS(BaseDNS):
     def update_records(self, ipv4, ipv6):
         """更新DNS记录"""
         try:
-            # 先获取当前记录
             current_ipv4, current_ipv6 = self.get_current_records()
+            full_domain = f"{self.hostname}.{self.domain}" if self.hostname != '@' else self.domain
 
             # 根据记录类型检查是否需要更新
             if self.record_type == 'A':
                 if not ipv4:
-                    self.logger.warning(f"[ALIYUN][{self.domain}] - 未提供IPv4地址")
+                    self.logger.warning(f"[ALIYUN][{full_domain}] - 未提供IPv4地址")
                     return False
                 if current_ipv4 == ipv4:
-                    self.logger.info(f"[ALIYUN][{self.domain}] - IPv4记录已是最新 ({ipv4})")
-                    return True  # 记录已是最新，直接返回True，不显示更新成功
+                    self.logger.info(f"[ALIYUN][{full_domain}] - 记录已是最新")
+                    return True
                 return self._update_record(ipv4)
 
             elif self.record_type == 'AAAA':
                 if not ipv6:
-                    self.logger.warning(f"[ALIYUN][{self.domain}] - 未提供IPv6地址")
+                    self.logger.warning(f"[ALIYUN][{full_domain}] - 未提供IPv6地址")
                     return False
                 if current_ipv6 == ipv6:
-                    self.logger.info(f"[ALIYUN][{self.domain}] - IPv6记录已是最新 ({ipv6})")
-                    return True  # 记录已是最新，直接返回True，不显示更新成功
+                    self.logger.info(f"[ALIYUN][{full_domain}] - 记录已是最新")
+                    return True
                 return self._update_record(ipv6)
 
             return False

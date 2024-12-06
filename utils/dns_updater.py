@@ -10,7 +10,7 @@ from PySide6.QtCore import QObject, QTimer
 
 from utils.ip_checker import IPChecker
 from utils.logger import Logger
-from utils.threads import DNSUpdateThread, DNSInitThread, IPCheckThread
+from utils.threads import DNSUpdateThread, DNSInitThread, IPCheckThread, ThreadManager
 
 
 class DNSUpdater(QObject):
@@ -34,20 +34,21 @@ class DNSUpdater(QObject):
         self.ip_checker = IPChecker()
         self._error_count = 0
         self._max_errors = 3
-        self._threads = []  # 存储所有活动线程
+        self._thread_manager = ThreadManager.get_instance()
+        self._retry_delays = [5, 15, 30]  # 重试延迟时间（秒）
 
     def start(self):
         """启动DNS更新服务"""
+        self._running = True
+
+        # 先加载平台
+        self.reload_platforms()
+
         # 初始化定时器
         if not self._timer:
             self._timer = QTimer(self)
             self._timer.timeout.connect(self.check_and_update)
-
-        self._running = True
-        self._timer.start(self._update_interval * 1000)
-
-        # 立即进行一次检查
-        QTimer.singleShot(100, self.check_and_update)
+            self._timer.start(self._update_interval * 1000)
 
     def set_update_interval(self, seconds):
         """
@@ -75,52 +76,53 @@ class DNSUpdater(QObject):
 
     def reload_platforms(self):
         """重新加载DNS平台"""
+        # 清除现有平台
+        self.platforms.clear()
+
         init_thread = DNSInitThread(self.config)
         init_thread.init_finished.connect(self._on_reload_finished)
         init_thread.error.connect(lambda e: self.logger.error(f"重新加载平台失败: {e}"))
-        self._threads.append(init_thread)
-        init_thread.start()
+        self._thread_manager.submit_thread(init_thread)
 
     def _on_reload_finished(self, new_platforms):
         """平台重新加载完成"""
         sender = self.sender()
-        if sender in self._threads:
-            self._threads.remove(sender)
+        if sender in self._thread_manager._active_threads:
+            self._thread_manager._active_threads.remove(sender)
 
         # 检查是否有变化
         old_platforms = set(self.platforms.keys())
         new_platform_keys = set(new_platforms.keys())
-        has_changes = old_platforms != new_platform_keys
 
         # 更新平台列表
         self.platforms = new_platforms
 
-        # 如果有变化，立即进行一次检查
-        if has_changes:
+        # 记录加载信息
+        self.logger.info(f"DNS平台配置已加载，共 {len(new_platforms)} 个记录")
+
+        # 如果是首次加载或有变化，立即进行一次检查
+        if not old_platforms or old_platforms != new_platform_keys:
             QTimer.singleShot(100, self.check_and_update)
 
     def check_and_update(self):
         """检查并更新DNS记录"""
-        if not self._running:
+        if not self._running or not self.platforms:
             return
 
-        # 先重新加载平台配置
-        self.reload_platforms()
-
-        # 然后检查IP
+        # 检查IP
         ip_thread = IPCheckThread(self.ip_checker)
         ip_thread.ip_checked.connect(self._on_ip_checked)
         ip_thread.error.connect(lambda e: self.logger.error(f"IP检查失败: {e}"))
-        self._threads.append(ip_thread)
-        ip_thread.start()
+        self._thread_manager.submit_thread(ip_thread)
 
     def _on_ip_checked(self, ipv4, ipv6):
         """IP检查完成的回调"""
         sender = self.sender()
-        if sender in self._threads:
-            self._threads.remove(sender)
+        if sender in self._thread_manager._active_threads:
+            self._thread_manager._active_threads.remove(sender)
 
         if not (ipv4 or ipv6):
+            self.logger.warning("未获取到任何IP地址")
             return
 
         for platform_key, platform in self.platforms.items():
@@ -128,30 +130,68 @@ class DNSUpdater(QObject):
                 record_type = platform.config.get('record_type', 'A')
                 current_ip = ipv4 if record_type == 'A' else ipv6
 
-                if current_ip:
-                    update_thread = DNSUpdateThread(platform, ipv4, ipv6)
-                    update_thread.update_finished.connect(self._on_update_finished)
-                    update_thread.error.connect(lambda e: self.logger.error(f"{platform_key} - 更新失败: {e}"))
-                    self._threads.append(update_thread)
-                    update_thread.start()
+                if not current_ip:
+                    self.logger.warning(f"{platform_key} - 未获取到{record_type}记录所需的IP地址")
+                    continue
+
+                # 先检查是否需要更新
+                try:
+                    current_records = platform.get_current_records()
+                    current_record = current_records[0] if record_type == 'A' else current_records[1]
+
+                    # 获取完整域名
+                    full_domain = f"{platform.hostname}.{platform.domain}" if platform.hostname != '@' else platform.domain
+                    platform_name = platform.__class__.__name__.replace('DNS', '').upper()
+                    platform_key = f"[{platform_name}][{full_domain}]"
+
+                    if current_record == current_ip:
+                        self.logger.info(f"{platform_key} - 记录已是最新")
+                        continue
+                except Exception as e:
+                    self.logger.error(f"{platform_key} - 检查记录失败: {str(e)}")
+                    continue
+
+                # 只有需要更新时才创建更新线程
+                update_thread = DNSUpdateThread(platform, ipv4, ipv6)
+                update_thread.error.connect(lambda e: self._on_update_error(e, platform, ipv4, ipv6))
+                self._thread_manager.submit_thread(update_thread)
 
             except Exception as e:
                 self.logger.error(f"{platform_key} - 处理出错: {str(e)}")
 
+    def _retry_update(self, platform, ipv4, ipv6, retry_count=0):
+        """重试更新"""
+        if retry_count >= len(self._retry_delays):
+            return
+
+        delay = self._retry_delays[retry_count]
+        self.logger.info(f"将在 {delay} 秒后重试更新...")
+        QTimer.singleShot(delay * 1000, lambda: self._do_retry(platform, ipv4, ipv6, retry_count))
+
+    def _do_retry(self, platform, ipv4, ipv6, retry_count):
+        """执行重试"""
+        if not self._running:
+            return
+
+        thread = DNSUpdateThread(platform, ipv4, ipv6)
+        thread.error.connect(lambda e: self._on_update_error(e, platform, ipv4, ipv6, retry_count + 1))
+        self._thread_manager.submit_thread(thread)
+
+    def _on_update_error(self, error, platform, ipv4, ipv6):
+        """更新错误处理"""
+        platform_key = platform.get_platform_key()
+        self.logger.error(f"{platform_key} - 更新失败: {error}")
+        # 直接重试，因为已经确认需要更新
+        self._retry_update(platform, ipv4, ipv6)
+
     def _on_update_finished(self, platform_key, success):
         """更新完成的回调"""
         sender = self.sender()
-        if sender in self._threads:
-            self._threads.remove(sender)
+        if sender in self._thread_manager._active_threads:
+            self._thread_manager._active_threads.remove(sender)
 
-        if success:
-            self.logger.info(f"{platform_key} - 更新成功")
-            if self.main_window:
-                self.main_window.show_message(f"{platform_key} 更新成功", "success")
-        else:
-            self.logger.error(f"{platform_key} - 更新失败")
-            if self.main_window:
-                self.main_window.show_message(f"{platform_key} 更新失败", "error")
+        # 不再显示任何消息，因为具体的成功/失败消息已经在 platform.update_records() 中处理了
+        pass
 
     def stop(self):
         """停止DNS更新服务"""
@@ -160,7 +200,4 @@ class DNSUpdater(QObject):
             self._timer.stop()
 
         # 停止所有线程
-        for thread in self._threads:
-            thread.quit()
-            thread.wait()
-        self._threads.clear()
+        self._thread_manager.stop_all()
