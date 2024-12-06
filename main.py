@@ -17,6 +17,7 @@ from utils.dns_updater import DNSUpdater
 from utils.ip_checker import IPChecker
 from utils.logger import Logger
 from utils.memory_tracker import MemoryTracker
+from utils.threads import ThreadManager
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
@@ -38,18 +39,23 @@ if __name__ == "__main__":
         # 延迟初始化DNS更新器和其他功能
         def delayed_init():
             global dns_updater, memory_timer
-            # 创建DNS更新器但不立即启动
-            dns_updater = DNSUpdater(config, window)
-            window.dns_updater = dns_updater
-            window.set_dns_updater(dns_updater)
+            try:
+                # 创建DNS更新器但不立即启动
+                dns_updater = DNSUpdater(config, window)
+                window.dns_updater = dns_updater
+                window.set_dns_updater(dns_updater)
 
-            # 设置内存监控
-            memory_timer = QTimer()
-            memory_timer.timeout.connect(MemoryTracker.log_memory_usage)
-            memory_timer.start(300000)
+                # 设置内存监控
+                memory_timer = QTimer()
+                memory_timer.timeout.connect(
+                    lambda: ThreadManager.instance().submit_task(MemoryTracker.log_memory_usage))
+                memory_timer.start(300000)
 
-            # 延迟1秒后启动DNS更新器
-            QTimer.singleShot(1000, dns_updater.start)
+                # 延迟1秒后启动DNS更新器
+                QTimer.singleShot(1000, dns_updater.start)
+
+            except Exception as e:
+                logger.error(f"初始化失败: {str(e)}")
 
 
         # 延迟初始化

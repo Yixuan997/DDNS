@@ -23,7 +23,8 @@ class DNSUpdater:
         return {
             **self._stats,
             'uptime': uptime,
-            'success_rate': (self._stats['successes'] / self._stats['updates'] * 100) if self._stats['updates'] > 0 else 0
+            'success_rate': (self._stats['successes'] / self._stats['updates'] * 100) if self._stats[
+                                                                                             'updates'] > 0 else 0
         }
 
     def _get_platform_class(self, platform_name):
@@ -65,7 +66,8 @@ class DNSUpdater:
                 try:
                     platform = platform_class(record)
                     # 使用完整域名构建唯一的 key
-                    full_domain = f"{record['hostname']}.{record['domain']}" if record['hostname'] != '@' else record['domain']
+                    full_domain = f"{record['hostname']}.{record['domain']}" if record['hostname'] != '@' else record[
+                        'domain']
                     platform_key = f"{platform_name}_{full_domain}_{record.get('record_type', 'A')}"
                     platforms[platform_key] = platform
                     self.logger.info(f"DNS平台初始化成功: [{platform_name.upper()}][{full_domain}]")

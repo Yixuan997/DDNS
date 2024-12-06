@@ -1,8 +1,8 @@
 import sys
-import os
-from pathlib import Path
-from loguru import logger
 import time
+from pathlib import Path
+
+from loguru import logger
 
 
 class Logger:

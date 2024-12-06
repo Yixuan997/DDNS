@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QApplication, 
 
 from ui.dialogs.about_dialog import AboutDialog
 from ui.dialogs.message_dialog import MessageDialog
+from ui.dialogs.progress_dialog import ProgressDialog
 from ui.styles.main_style import MainStyle
 from ui.widgets.dns_tab import DNSTab
 from ui.widgets.log_tab import LogTab
@@ -13,6 +14,8 @@ from ui.widgets.title_bar import TitleBar
 from ui.widgets.toast import ToastWidget
 from utils.logger import Logger
 from utils.resource_manager import ResourceManager
+from utils.threads import UpdateDownloadThread, ThreadManager
+from utils.updater import Updater
 
 
 class MainWindow(QMainWindow):
@@ -22,6 +25,7 @@ class MainWindow(QMainWindow):
         self.ip_checker = ip_checker
         self.dns_updater = dns_updater
         self.logger = Logger()
+        self.updater = Updater()
 
         # 设置窗口属性
         self.setWindowIcon(ResourceManager.get_icon("icon.svg"))
@@ -51,7 +55,7 @@ class MainWindow(QMainWindow):
         inner_layout.setContentsMargins(0, 0, 0, 0)
         inner_layout.setSpacing(0)
 
-        # 创建标题栏
+        # 建标题栏
         self.title_bar = TitleBar(self)
         inner_layout.addWidget(self.title_bar)
 
@@ -83,7 +87,7 @@ class MainWindow(QMainWindow):
         inner_layout.addWidget(content_widget)
         self.main_layout.addWidget(self.inner_widget)
 
-        # 创建消息提示组件
+        # 创建消息示组件
         self.toast = ToastWidget(self)
 
     def apply_styles(self):
@@ -136,7 +140,7 @@ class MainWindow(QMainWindow):
         self.tray_icon.setContextMenu(tray_menu)
         self.tray_icon.show()
 
-        # 托盘图标击显示主窗口
+        # 托盘图标击显示主
         self.tray_icon.activated.connect(self._on_tray_activated)
 
     def _on_tray_activated(self, reason):
@@ -169,3 +173,65 @@ class MainWindow(QMainWindow):
         self.dns_updater = dns_updater
         if hasattr(self, 'status_tab'):
             self.status_tab.dns_updater = dns_updater
+
+    def check_for_updates(self):
+        """检查更新"""
+
+        def on_check_finished(result):
+            has_update, update_info = result
+            try:
+                self.logger.debug(f"检查更新结果: has_update={has_update}, update_info={update_info}")
+                if has_update and update_info:
+                    if self.show_dialog(
+                            f"发现新版本 {update_info['version']}\n\n{update_info['description']}\n\n是否现在更新？",
+                            "confirm"
+                    ):
+                        progress_dialog = ProgressDialog(self)
+                        progress_dialog.move(
+                            self.x() + (self.width() - progress_dialog.width()) // 2,
+                            self.y() + (self.height() - progress_dialog.height()) // 2
+                        )
+
+                        # 创建下载线程
+                        download_thread = UpdateDownloadThread(update_info['download_url'])
+
+                        # 连接信号
+                        download_thread.progress.connect(progress_dialog.set_progress)
+                        download_thread.success.connect(
+                            lambda file_path: self._on_download_success(file_path, progress_dialog))
+                        download_thread.error.connect(lambda error: self._on_download_error(error, progress_dialog))
+                        download_thread.finished.connect(progress_dialog.close)
+
+                        # 保存线程引用
+                        self.download_thread = download_thread
+
+                        # 启动线程和显示对话框
+                        ThreadManager.instance().submit_thread(download_thread)
+                        progress_dialog.exec()
+                else:
+                    self.show_message("当前已是最新版本", "info")
+
+            except Exception as e:
+                self.logger.error(f"处理更新检查结果失败: {str(e)}")
+                self.show_message(f"检查更新失败: {str(e)}", "error")
+
+        try:
+            self.logger.debug("开始检查更新...")
+            if not hasattr(self, 'updater'):
+                self.updater = Updater()
+            self.updater.check_update(on_check_finished)
+        except Exception as e:
+            self.logger.error(f"检查更新失败: {str(e)}")
+            self.show_message(f"检查更新失败: {str(e)}", "error")
+
+    def _on_download_success(self, file_path, dialog=None):
+        """下载成功处理"""
+        if dialog:
+            dialog.close()
+        self.show_message("更新下载完成，重启程序后生效", "success")
+
+    def _on_download_error(self, error, dialog=None):
+        """下载失败处理"""
+        if dialog:
+            dialog.close()
+        self.show_message(f"下载更新失败: {error}", "error")

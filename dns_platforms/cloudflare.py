@@ -7,7 +7,9 @@
 """
 
 import requests
+from PySide6.QtCore import Signal
 
+from utils.threads import BaseThread
 from .base import BaseDNS
 
 
@@ -240,3 +242,30 @@ class CloudflareDNS(BaseDNS):
         except Exception as e:
             self.logger.error(f"更新记录失败: {str(e)}")
             return False
+
+
+class CloudflareRequestThread(BaseThread):
+    """Cloudflare API请求线程"""
+    success = Signal(object)  # 请求成功信号
+
+    def __init__(self, method, endpoint, **kwargs):
+        super().__init__()
+        self.method = method
+        self.endpoint = endpoint
+        self.kwargs = kwargs
+
+    def run(self):
+        try:
+            response = requests.request(self.method, f"{CloudflareDNS.API_BASE}/{self.endpoint}", **self.kwargs)
+            if response.ok:
+                data = response.json()
+                if data.get('success'):
+                    self.success.emit(data.get('result'))
+                else:
+                    self.error.emit(str(data.get('errors', [])))
+            else:
+                self.error.emit(f"请求失败: {response.status_code}")
+        except Exception as e:
+            self.error.emit(str(e))
+        finally:
+            self.finished.emit()

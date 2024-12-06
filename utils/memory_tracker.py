@@ -2,6 +2,7 @@ import gc
 import os
 
 import psutil
+
 from utils.logger import Logger
 
 
@@ -21,7 +22,8 @@ class MemoryTracker:
 
             # 只在内存变化超过阈值时记录
             if abs(memory_mb - MemoryTracker._last_memory_usage) > MemoryTracker._memory_threshold:
-                logger.debug(f"内存使用: {memory_mb:.2f} MB (变化: {memory_mb - MemoryTracker._last_memory_usage:+.2f} MB)")
+                logger.debug(
+                    f"内存使用: {memory_mb:.2f} MB (变化: {memory_mb - MemoryTracker._last_memory_usage:+.2f} MB)")
                 MemoryTracker._last_memory_usage = memory_mb
 
         except Exception as e:

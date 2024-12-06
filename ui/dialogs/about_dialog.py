@@ -59,9 +59,23 @@ class AboutDialog(QWidget):
 
         # 进度条
         self.progress_bar = QProgressBar()
-        self.progress_bar.setFixedWidth(200)
+        self.progress_bar.setFixedWidth(300)  # 增加宽度
+        self.progress_bar.setFixedHeight(4)  # 减小高度，使其更现代
+        self.progress_bar.setTextVisible(False)  # 隐藏文字
         self.progress_bar.setVisible(False)
         self.progress_bar.setAlignment(Qt.AlignCenter)
+        # 设置进度条样式
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: none;
+                background-color: #f0f0f0;
+                border-radius: 2px;
+            }
+            QProgressBar::chunk {
+                background-color: #5352ed;
+                border-radius: 2px;
+            }
+        """)
         progress_layout = QHBoxLayout()
         progress_layout.addWidget(self.progress_bar, alignment=Qt.AlignCenter)
         layout.addLayout(progress_layout)
@@ -106,32 +120,50 @@ class AboutDialog(QWidget):
         if not self.parent:  # 确保有父窗口
             return
 
+        # 禁用按钮并更改状态
         self.update_btn.setEnabled(False)
         self.update_btn.setText("检查中...")
+        self.update_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #e1e5ee;
+                color: #666666;
+            }
+        """)
+
+        def update_callback(result):
+            """更新检查的回调函数"""
+            has_update, update_info = result
+            try:
+                if has_update and update_info:
+                    # 显示更新确认对话框
+                    if self.parent.show_dialog(
+                            f"发现新版本: v{update_info['version']}\n\n"
+                            f"{update_info['description']}\n\n"
+                            "是否立即更新？",
+                            "confirm"
+                    ):
+                        self.start_download(update_info['download_url'])
+                    else:
+                        # 用户取消更新，恢复按钮状态
+                        self._reset_button_state()
+                elif update_info and 'error' in update_info:
+                    # 显示错误信息
+                    self.parent.show_message(f"检查更新失败: {update_info['error']}", "error")
+                    self._reset_button_state()
+                else:
+                    self.parent.show_message("当前已是最新版本", "success")
+                    self._reset_button_state()
+            except Exception as e:
+                self.parent.show_message(f"处理更新信息失败: {str(e)}", "error")
+                self._reset_button_state()
 
         try:
-            has_update, update_info = self.updater.check_update()
-
-            if has_update and update_info:  # 确保 update_info 不为 None
-                # 显示更新确认对话框
-                if self.parent.show_dialog(
-                        f"发现新版本: v{update_info['version']}\n\n"
-                        f"{update_info['description']}\n\n"
-                        "是否立即更新？",
-                        "confirm"
-                ):
-                    self.start_download(update_info['download_url'])
-            else:
-                self.parent.show_message("当前已是最新版本", "success")
-
+            # 使用回调函数方式调用
+            self.updater.check_update(update_callback)
         except Exception as e:
             if self.parent:
-                self.parent.show_message("检查更新失败", "error")
-
-        finally:
-            if not self.isHidden():  # 确保窗口还在
-                self.update_btn.setEnabled(True)
-                self.update_btn.setText("检查更新")
+                self.parent.show_message(f"启动更新检查失败: {str(e)}", "error")
+            self._reset_button_state()
 
     def start_download(self, url):
         """开始下载"""
@@ -139,34 +171,63 @@ class AboutDialog(QWidget):
             return
 
         try:
+            # 显示进度条并设置按钮状态
             self.progress_bar.setVisible(True)
-            self.update_btn.setText("下载中...")
+            self.progress_bar.setValue(0)
+            self.update_btn.setText("准备下载...")
             self.update_btn.setEnabled(False)
+            self.update_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #e1e5ee;
+                    color: #666666;
+                }
+            """)
 
             def progress_callback(value):
                 if not self.isHidden():  # 确保窗口还在
                     self.progress_bar.setValue(value)
-                    if value >= 100:
-                        self.download_complete()
+                    # 更新按钮文字，使用箭头符号
+                    if value < 100:
+                        self.update_btn.setText(f"下载中 {value}%")
+                    else:
+                        self.update_btn.setText("完成")
 
-            # 在新线程中下载
-            temp_file = self.updater.download_update(url, progress_callback)
-            if temp_file:
-                self.parent.show_dialog("更新下载完成，重启程序后生效", "info")
-            else:
-                self.parent.show_message("下载更新失败", "error")
+            def download_success(file_path):
+                if not self.isHidden():
+                    self.parent.show_message("更新下载完成，重启程序后生效", "success")
+                    self.download_complete()
+
+            def download_error(error):
+                if not self.isHidden():
+                    self.parent.show_message(f"下载失败: {error}", "error")
+                    self.download_complete()
+
+            # 创建下载线程
+            from utils.threads import UpdateDownloadThread
+            download_thread = UpdateDownloadThread(url)
+            download_thread.progress.connect(progress_callback)
+            download_thread.success.connect(download_success)
+            download_thread.error.connect(download_error)
+
+            # 启动下载线程
+            from utils.threads import ThreadManager
+            ThreadManager.instance().submit_thread(download_thread)
 
         except Exception as e:
             if self.parent:
-                self.parent.show_message("下载更新失败", "error")
-
-        finally:
-            if not self.isHidden():  # 确保窗口还在
-                self.download_complete()
+                self.parent.show_message(f"启动下载失败: {str(e)}", "error")
+            self.download_complete()
 
     def download_complete(self):
         """下载完成"""
         if not self.isHidden():  # 确保窗口还在
             self.progress_bar.setVisible(False)
+            self.progress_bar.setValue(0)
+            self._reset_button_state()
+
+    def _reset_button_state(self):
+        """重置按钮状态"""
+        if not self.isHidden():  # 确保窗口还在
             self.update_btn.setEnabled(True)
             self.update_btn.setText("检查更新")
+            self.update_btn.setStyleSheet("")  # 恢复默认样式
