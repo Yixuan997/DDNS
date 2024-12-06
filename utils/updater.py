@@ -240,7 +240,7 @@ class UpdateCheckThread(BaseThread):
 
 
 class Updater:
-    CURRENT_VERSION = "1.0.0"
+    CURRENT_VERSION = "1.0.2"
     GITHUB_API = "https://api.github.com/repos/Yixuan997/DDNS/releases/latest"
 
     def __init__(self):
